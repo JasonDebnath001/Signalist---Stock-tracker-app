@@ -3,6 +3,9 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import InputField from "@/components/forms/InputField";
 import FooterLink from "@/components/forms/FooterLink";
+import { signInWithEmail } from "@/lib/actions/authActions";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 type SignInFormData = {
   email: string;
@@ -11,6 +14,8 @@ type SignInFormData = {
 
 const SignIn = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const router = useRouter()
 
   const {
     register,
@@ -22,15 +27,21 @@ const SignIn = () => {
   });
 
   const onSubmit = async (data: SignInFormData) => {
-    try {
-      setIsSubmitting(true);
-      console.log("Signing in with", data);
-      // TODO: replace with real sign-in logic
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
+     try {
+          // signup with email server action
+          const result = await signInWithEmail(data as any);
+          if (result.success) router.push("/");
+        } catch (error) {
+          console.log(error);
+          toast.error("Sign In Failed", {
+            description:
+              error instanceof Error
+                ? error.message
+                : "Failed to log in to account",
+          });
+        } finally {
+          setIsSubmitting(false);
+        }
   };
 
   return (
