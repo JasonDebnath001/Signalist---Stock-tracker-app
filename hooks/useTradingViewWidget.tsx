@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 interface TradingViewConfig {
   [key: string]: Record<string, unknown>;
@@ -29,13 +29,13 @@ const useTradingViewWidget = (
     }
 
     // Clear any existing content
-    container.innerHTML = '';
+    container.innerHTML = "";
 
     // Create widget container
-    const widgetContainer = document.createElement('div');
-    widgetContainer.className = 'tradingview-widget-container__widget';
+    const widgetContainer = document.createElement("div");
+    widgetContainer.className = "tradingview-widget-container__widget";
     widgetContainer.style.height = `${height}px`;
-    widgetContainer.style.width = '100%';
+    widgetContainer.style.width = "100%";
     container.appendChild(widgetContainer);
 
     // Generate unique widget ID and store config
@@ -54,37 +54,19 @@ const useTradingViewWidget = (
 
     // Cleanup function
     return () => {
-      // Save references before cleanup
       const cleanupContainer = container;
       const cleanupWidgetId = widgetId;
 
       if (cleanupContainer) {
-        // Remove all scripts
-        const scripts = cleanupContainer.getElementsByTagName('script');
-        Array.from(scripts).forEach(script => script.remove());
-        
-        // Clear container
-        cleanupContainer.innerHTML = '';
+        const scripts = cleanupContainer.getElementsByTagName("script");
+        Array.from(scripts).forEach((s) => s.remove());
+        cleanupContainer.innerHTML = "";
         delete cleanupContainer.dataset.loaded;
         delete cleanupContainer.dataset.widgetId;
-        
-        // Cleanup window object
+
         if (window.tradingViewConfigs && cleanupWidgetId) {
           delete window.tradingViewConfigs[cleanupWidgetId];
         }
-      }
-    };
-
-    containerRef.current.appendChild(script);
-    containerRef.current.dataset.loaded = "true";
-
-    return () => {
-      const container = containerRef.current;
-      if (container) {
-        const scripts = container.getElementsByTagName('script');
-        Array.from(scripts).forEach(script => script.remove());
-        container.innerHTML = '';
-        delete container.dataset.loaded;
       }
     };
   }, [scriptUrl, config, height]);
