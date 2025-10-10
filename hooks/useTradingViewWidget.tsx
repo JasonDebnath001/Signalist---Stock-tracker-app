@@ -1,15 +1,13 @@
 "use client";
 import { useEffect, useRef } from "react";
 
-interface TradingViewConfig {
-  [key: string]: Record<string, unknown>;
+declare global {
+  interface Window {
+    TradingView?: {
+      widget?: (cfg: Record<string, unknown>) => void;
+    };
+  }
 }
-
-interface CustomWindow extends Window {
-  tradingViewConfigs?: TradingViewConfig;
-}
-
-declare const window: CustomWindow;
 
 const useTradingViewWidget = (
   scriptUrl: string,
@@ -18,58 +16,98 @@ const useTradingViewWidget = (
 ) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const configStr = JSON.stringify(config);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    if (container.dataset.loaded) return;
-
-    // Initialize trading view configs if not exists
-    if (!window.tradingViewConfigs) {
-      window.tradingViewConfigs = {};
-    }
 
     // Clear any existing content
     container.innerHTML = "";
 
-    // Create widget container
-    const widgetContainer = document.createElement("div");
-    widgetContainer.className = "tradingview-widget-container__widget";
-    widgetContainer.style.height = `${height}px`;
-    widgetContainer.style.width = "100%";
-    container.appendChild(widgetContainer);
+    // Create a unique div to host the widget
+    const widgetId = `tradingview_${Math.random()
+      .toString(36)
+      .substring(2, 9)}`;
+    const widgetDiv = document.createElement("div");
+    widgetDiv.id = widgetId;
+    widgetDiv.style.width = "100%";
+    widgetDiv.style.height = `${height}px`;
+    container.appendChild(widgetDiv);
 
-    // Generate unique widget ID and store config
-    const widgetId = `tradingview_${Math.random().toString(36).substring(7)}`;
-    window.tradingViewConfigs[widgetId] = config;
-
-    // Create and inject the script
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.async = true;
-    script.src = scriptUrl;
-    script.innerHTML = JSON.stringify(window.tradingViewConfigs[widgetId]);
-    container.appendChild(script);
-    container.dataset.loaded = "true";
-    container.dataset.widgetId = widgetId;
-
-    // Cleanup function
-    return () => {
-      const cleanupContainer = container;
-      const cleanupWidgetId = widgetId;
-
-      if (cleanupContainer) {
-        const scripts = cleanupContainer.getElementsByTagName("script");
-        Array.from(scripts).forEach((s) => s.remove());
-        cleanupContainer.innerHTML = "";
-        delete cleanupContainer.dataset.loaded;
-        delete cleanupContainer.dataset.widgetId;
-
-        if (window.tradingViewConfigs && cleanupWidgetId) {
-          delete window.tradingViewConfigs[cleanupWidgetId];
+    const createWidget = () => {
+      if (
+        !window.TradingView ||
+        typeof window.TradingView.widget === "undefined"
+      )
+        return;
+      try {
+        const parsed = JSON.parse(configStr) as Record<string, unknown>;
+        const cfg = { ...parsed, container_id: widgetId } as Record<
+          string,
+          unknown
+        >;
+        // Try constructor form first (some builds require `new TradingView.widget(cfg)`)
+        try {
+          // try constructor form: treat widget as a constructor
+          const WidgetConstructor = window.TradingView.widget as unknown as {
+            new (c: Record<string, unknown>): unknown;
+          };
+          new WidgetConstructor(cfg);
+        } catch (ctorErr) {
+          // Fallback to function call form
+          try {
+            (window.TradingView.widget as (c: Record<string, unknown>) => void)(
+              cfg
+            );
+          } catch (callErr) {
+            console.error(
+              "TradingView widget instantiation failed (both constructor and call)",
+              callErr,
+              ctorErr
+            );
+          }
         }
+      } catch (err) {
+        console.error("TradingView widget instantiation failed", err);
       }
     };
-  }, [scriptUrl, config, height]);
+
+    const existingScript = document.querySelector(
+      `script[src="${scriptUrl}"]`
+    ) as HTMLScriptElement | null;
+
+    if (window.TradingView) {
+      createWidget();
+    } else if (existingScript) {
+      // script exists but may not yet be loaded
+      const ds = existingScript.dataset;
+      if (ds && ds.loaded === "true") {
+        createWidget();
+      } else {
+        existingScript.addEventListener("load", createWidget);
+      }
+    } else {
+      const script = document.createElement("script");
+      script.src = scriptUrl;
+      script.async = true;
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        createWidget();
+      };
+      script.onerror = (e) =>
+        console.error("Failed to load TradingView script", e);
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      // remove widget div on cleanup
+      if (container.contains(widgetDiv)) {
+        container.removeChild(widgetDiv);
+      }
+    };
+    // stringify config so effect re-runs when config changes
+  }, [scriptUrl, configStr, height]);
 
   return containerRef;
 };
